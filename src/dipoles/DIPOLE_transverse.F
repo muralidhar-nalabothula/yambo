@@ -26,7 +26,7 @@ subroutine Dipole_transverse(Xen,Xk,Dip)
 
  use X_m,                 ONLY:l_X_terminator
  use IO_int,              ONLY:io_control
- use IO_m,                ONLY:manage_action,OP_IF_START_RD_CL_IF_END,OP_RD_CL
+ use IO_m,                ONLY:manage_action,RD_CL_IF_END,OP_RD,OP_RD_CL
  use wave_func,           ONLY:wf_ncx,WF
  use com,                 ONLY:msg
  use timing_m,            ONLY:timing
@@ -81,10 +81,11 @@ subroutine Dipole_transverse(Xen,Xk,Dip)
  l_eval_DIP_P2=compute_P2_dipoles
  !
  ! Synchronize some memory
- if (have_gpu) then
-   YAMBO_FREE_GPU(DEV_VAR(g_vec))
-   YAMBO_ALLOC_GPU_SOURCE(DEV_VAR(g_vec),g_vec)
- endif
+#ifdef _GPU
+ YAMBO_FREE_GPU(DEV_VAR(g_vec))
+ YAMBO_ALLOC_GPU_SOURCE(DEV_VAR(g_vec),g_vec)
+ if(l_eval_DIP_P2) call warning("P2 not coded with GPUs, CPU only algorithm for it")
+#endif
  !
  l_use_comm=l_eval_dip_V.or.l_eval_dip_iR
  !
@@ -95,16 +96,19 @@ subroutine Dipole_transverse(Xen,Xk,Dip)
    io_KB_abinit_err= io_err(1)
    io_KB_pwscf_err = io_err(2)
    !
+   IO_ACT_NOW=OP_RD
+   if (N_elements_todo==0) IO_ACT_NOW=OP_RD_CL
+   !
    ! Define pp_kbv_dim_yambo and pp_kbv_table
    !
    if (io_KB_pwscf_err==0) then
-     call io_control(ACTION=OP_RD_CL,SEC=(/2/),ID=ID)
+     call io_control(ACTION=IO_ACT_NOW,SEC=(/2/),ID=ID)
      io_KB_pwscf_err=io_KB_pwscf(ID)
      call DIPOLE_kb_pwscf_def_dim()
    endif
    !
    if (io_KB_abinit_err==0) then
-     call io_control(ACTION=OP_RD_CL,SEC=(/2/),ID=ID)
+     call io_control(ACTION=IO_ACT_NOW,SEC=(/2/),ID=ID)
      io_KB_abinit_err=io_KB_abinit(ID)
      call DIPOLE_kb_abinit_def_dim()
    endif
@@ -134,7 +138,8 @@ subroutine Dipole_transverse(Xen,Xk,Dip)
    if (allocated(Xen%Eo).and.l_eval_dip_iR) call msg('rns','[X] Using energies without QP corrections for the dipoles')
    !
    allocate(element_1D_spin(Xk%nibz*n_sp_pol))
-   element_1D_spin=(/PAR_IND_DIPk_ibz%element_1D(:),PAR_IND_DIPk_ibz%element_1D(:)/)
+   if (n_sp_pol==1) element_1D_spin=PAR_IND_DIPk_ibz%element_1D
+   if (n_sp_pol==2) element_1D_spin=(/PAR_IND_DIPk_ibz%element_1D(:),PAR_IND_DIPk_ibz%element_1D(:)/)
    !
    ! sum_kb workspace
    !
@@ -165,7 +170,7 @@ subroutine Dipole_transverse(Xen,Xk,Dip)
      !
      if(l_use_comm) then
        !
-       IO_ACT_NOW=manage_action(OP_IF_START_RD_CL_IF_END,ifrag,1,Xk%nibz*n_sp_pol,element_1D=element_1D_spin)
+       IO_ACT_NOW=manage_action(RD_CL_IF_END,ifrag,1,Xk%nibz*n_sp_pol,element_1D=element_1D_spin)
        call io_control(ACTION=IO_ACT_NOW,SEC=(/ifrag+1/),ID=ID)
        !
        if (io_KB_pwscf_err==0 .and.ifrag>1)  io_KB_pwscf_err=io_KB_pwscf(ID)
@@ -332,10 +337,13 @@ subroutine Dipole_transverse(Xen,Xk,Dip)
  !
  if (l_use_comm) then
    call DIP_alloc("DIP_work")
-   YAMBO_FREE_GPU(DEV_VAR(kbv))
+   if (have_gpu) then
+     YAMBO_FREE_GPU(DEV_VAR(kbv))
+     YAMBO_FREE_GPU(XX)
+   else
+     YAMBO_FREE(XX)
+   endif
    YAMBO_FREE(DEV_VAR(kbv))
-   YAMBO_FREE_GPU(XX)
-   YAMBO_FREE(XX)
    YAMBO_FREE(pp_n_l_comp)
    YAMBO_FREE(pp_table)
    YAMBO_FREE(pp_kbv_table)

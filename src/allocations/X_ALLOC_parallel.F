@@ -40,13 +40,15 @@ subroutine X_ALLOC_parallel(X_par,NG,NW,mode)
  ! Initialization
  !
  if (l_XUP) then
-   call MATRIX_init( "XUP", X_par , NG, NW )
+   call MATRIX_init( "XUP", X_par, NG, NW )
  else if (l_PAR) then
-   call MATRIX_init( "X"  , X_par , NG, NW )
+   call MATRIX_init( "X"  , X_par, NG, NW )
  endif
  !
  X_rows = X_par%rows
+ !DEV_ACC update device(X_rows)
  X_cols = X_par%cols
+ !DEV_ACC update device(X_cols)
  !
  if (l_XUP.and..not.X_FILL_UP_matrix_only.and.X_par%INTER_comm%n_CPU>1) then
    !
@@ -82,3 +84,4 @@ subroutine X_ALLOC_parallel(X_par,NG,NW,mode)
  call PARALLEL_live_message("RL vectors(X)",LOADED=X_par%ncols*X_par%nrows,TOTAL=NG**2,NCPU=X_par%INTER_comm%n_CPU)
  !
 end subroutine
+
