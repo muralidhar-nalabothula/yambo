@@ -27,7 +27,7 @@ keep_hdf5=no
 #
 # package versions
 #
-version_Ydriver=1.4.2
+version_Ydriver=1.4.3
 version_Ydiago=0.3.1
 version_iotk=y1.2.2
 version_netcdf=4.9.0
@@ -46,7 +46,7 @@ version_fftw=3.3.10
 version_fftqe=missing
 version_yaml=0.2.2
 version_futile=missing
-version_devxlib=0.8.4
+version_devxlib=0.8.5
 #
 # package names
 #
