@@ -9,29 +9,31 @@ integer function X_dielectric_matrix(Xen,Xk,q,X,Xw,Dip,SILENT_MODE,CHILD)
  ! 
  ! Calculates and stores on file the dielectric matrix.
  !
- use pars,          ONLY:SP,schlen
+ use pars,          ONLY:SP,schlen,cI
  use drivers,       ONLY:l_alda_fxc,l_gw0,l_life,l_rpa_IP 
  use DIPOLES,       ONLY:DIPOLE_t
  use ALLOC,         ONLY:X_ALLOC_elemental,DIPOLE_ALLOC_global
  use X_m,           ONLY:X_t,self_detect_E_range,X_poles,l_recalculate_X,l_write_disk_Xo,&
-&                        l_X_terminator,X_terminator_Kind,X_mat,X_par,X_par_lower_triangle,&
+&                        l_X_terminator,X_terminator_Kind,X_mat,X_par,&
 &                        X_DbGd_nkpt_at_q,use_X_DbGd,X_DbGd_nkpt_at_q_table,X_Double_Grid_setup,&
 &                        n_OPTICAL_dir_to_eval,X_par_average
  use LIVE_t,        ONLY:live_timing
  use stderr,        ONLY:intc
  use frequency,     ONLY:w_samp
- use R_lattice,     ONLY:bz_samp,nqibz
- use electrons,     ONLY:levels
+ use R_lattice,     ONLY:bz_samp,nqibz,l_Dirac,Dirac_v_f
+ use electrons,     ONLY:levels,n_sp_pol
  use parallel_int,  ONLY:PP_wait,PARALLEL_global_indexes,PARALLEL_WF_distribute,PARALLEL_WF_index
  use parallel_m,    ONLY:PAR_IND_Q_ibz,PAR_Q_ibz_index,PAR_nQ_ibz,PAR_COM_X_WORLD,&
 &                        PAR_IND_Xk_ibz,PAR_IND_CON_BANDS_X,PAR_IND_VAL_BANDS_X
  use wave_func,     ONLY:WF_buffered_IO,WF,WF_buffer
  use IO_int,        ONLY:io_control,IO_and_Messaging_switch
- use IO_m,          ONLY:OP_RD_CL,OP_APP_CL,VERIFY,REP,io_RESPONSE
+ use IO_m,          ONLY:OP_RD_CL,OP_APP_CL,VERIFY,REP,io_RESPONSE,OP_WR_CL
+ use com,           ONLY:depth,msg
  use TDDFT,         ONLY:F_xc_gspace
  use interfaces,    ONLY:WF_load,WF_free
  use QP_m,          ONLY:QP_n_W_freqs_redux
  use matrix,        ONLY:MATRIX_reset,MATRIX_copy
+ use parser_m,      ONLY:parser
  !
 #include<y_memory.h>
  !
@@ -49,10 +51,11 @@ integer function X_dielectric_matrix(Xen,Xk,q,X,Xw,Dip,SILENT_MODE,CHILD)
  ! Work Space
  !
  integer              :: iq,ID(2),i_err,X_MEM_n_freqs,io_X_done(nqibz),iq_mem,&
-&                        X_MEM_n_tot_freqs,n_poles,iq_dir
- real(SP)             :: minmax_ehe(2)
+&                        X_MEM_n_tot_freqs,n_poles,iq_dir,drude_n_states
+ real(SP)             :: minmax_ehe(2),f_eh
  character(1)         :: sec_mode
  character(schlen)    :: X_what
+ logical              :: metal_cond(2)
  !
  ! logicals and control
  !
@@ -72,6 +75,15 @@ integer function X_dielectric_matrix(Xen,Xk,q,X,Xw,Dip,SILENT_MODE,CHILD)
  ! TDDFT KERNEL SETUP (-1 argument)
  !
  call TDDFT_do_X_W_typs(-1,X,Xw)
+ !
+ !Check if to include the Dirac cone Fermi velocity
+ !
+ call parser('graphene',l_Dirac)
+ if(l_Dirac) then
+   call msg('r','Graphene q--> 0 term included')
+   call parser('v_fermi',Dirac_v_f)
+ end if
+ !
  !
  ! Sectioning
  !
@@ -116,9 +128,14 @@ integer function X_dielectric_matrix(Xen,Xk,q,X,Xw,Dip,SILENT_MODE,CHILD)
    if (mod(Xw%n_freqs,2)>0) Xw%n_freqs=Xw%n_freqs+1
    X%mpa_npoles  = Xw%n_freqs/2
    X_MEM_n_freqs =2*X%mpa_npoles
+   !
+   if (Xw%er(2) < Xw%er(1)) then
+     Xw%er(1) = 0.0_SP
+     Xw%er(2) = ( maxval(Xen%E(X%ib(2),:,:)) - minval(Xen%E(X%ib(1),:,:)) ) / 2.0_SP
+   endif
+   !
    X%ordering='t'
    Xw%grid_type="mp"
-   if(Xw%dr(1)<epsilon(1._SP)) call error("Damping = 0.0 not compatible with MPA dielectric constant")
    !
  endif
  !
@@ -192,6 +209,22 @@ integer function X_dielectric_matrix(Xen,Xk,q,X,Xw,Dip,SILENT_MODE,CHILD)
  ! Some check
  !
  if(X%ib(2)>Xen%nb) call error("Too many bands required in X. Run DFT with more bands!")
+ !
+ ! GS put a check in MPA for metals and correct first frequency appropriately
+ !
+ if (X%whoami==5) then   
+   ! 
+   call metallic_occupations(Xen,Xk,f_eh,drude_n_states)  
+   ! 
+   metal_cond(1) = any( (/Xen%nbf(:n_sp_pol)/=Xen%nbm(:n_sp_pol)/) )
+   metal_cond(2) = (f_eh>0._SP)
+   !
+   if (Xw%dr(1)<epsilon(1._SP) .and. all((/metal_cond(1:2)/)) ) then
+      call warning("dmXrnge = 0.0 not compatible with MPA dielectric constant for metals, changed to 1.d-4 Ha")
+      call msg('r','')
+      Xw%dr(1)=1.e-4_SP
+   end if
+ end if
  !
  ! Parallel distribution
  !=======================
@@ -301,7 +334,7 @@ integer function X_dielectric_matrix(Xen,Xk,q,X,Xw,Dip,SILENT_MODE,CHILD)
    !
    do iq_dir=1,n_OPTICAL_dir_to_eval
      !
-     call X_ALLOC_parallel(X_par(iq_mem),X%ng,Xw%n_freqs,"XUP")
+     call X_ALLOC_parallel(X_par(iq_mem),X%ng,Xw%n_freqs,"X")
      !
      if (n_OPTICAL_dir_to_eval>1) call X_AVERAGE_setup("DIR-LOOP",iq_dir,X%q0)
      if (n_OPTICAL_dir_to_eval>1) X_what="("//trim(intc(iq_dir))//" of "//trim(intc(n_OPTICAL_dir_to_eval))//")"
@@ -314,6 +347,8 @@ integer function X_dielectric_matrix(Xen,Xk,q,X,Xw,Dip,SILENT_MODE,CHILD)
      endif
      !
      if (.not.l_rpa_IP) call X_redux(iq,"X"//trim(X_what),X_par(iq_mem),Xw,X)
+     !
+     if (iq==1) call X_symmetrize_q0(X_par(iq_mem),X%ng,Xw)
      !
      if (n_OPTICAL_dir_to_eval>1.and.iq_dir==1) call MATRIX_copy(X_par(iq_mem),X_par_average,.TRUE.)
      if (n_OPTICAL_dir_to_eval>1)               call X_AVERAGE_do_it("ACCUMULATE",X_par(iq_mem))
@@ -364,8 +399,6 @@ integer function X_dielectric_matrix(Xen,Xk,q,X,Xw,Dip,SILENT_MODE,CHILD)
    !
    ! CLEAN (2)
    if (io_RESPONSE) call MATRIX_reset(X_par(iq_mem))
-   YAMBO_FREE(X_par_lower_triangle%blc)
-   call MATRIX_reset(X_par_lower_triangle)
    !
    if (use_X_DbGd) then
      YAMBO_FREE(X_DbGd_nkpt_at_q)
@@ -455,3 +488,66 @@ integer function X_dielectric_matrix(Xen,Xk,q,X,Xw,Dip,SILENT_MODE,CHILD)
    end subroutine
    !
 end function
+
+subroutine X_symmetrize_q0(X_par, NG, Xw)
+  use pars,          ONLY: SP, DP, cZERO
+  use matrix,        ONLY: PAR_matrix
+  use frequency,     ONLY: w_samp
+  use D_lattice,     ONLY: nsym, i_time_rev
+  use R_lattice,     ONLY: g_rot
+  use parallel_int,  ONLY: PP_redux_wait
+  use com,           ONLY: msg
+
+  implicit none
+
+  type(PAR_matrix), intent(inout) :: X_par
+  integer,          intent(in)    :: NG
+  type(w_samp),     intent(in)    :: Xw
+
+  integer :: ig1, ig2, ig1_sym, ig2_sym, isym, iw
+  integer :: nsym_loop, ig1_loc
+  complex(SP), allocatable :: X_full(:,:)
+  !
+  if (nsym <= 1) return
+  !
+  call msg('s', 'Applying q->0 symmetries to the macroscopic dielectric matrix')
+  !
+  allocate(X_full(NG, NG))
+  ! 
+  do iw = 1, Xw%n_freqs  
+     X_full = cZERO
+     if (X_par%nrows>0) X_full(X_par%rows(1):X_par%rows(2), 1:NG) = X_par%blc(X_par%rows(1):X_par%rows(2), 1:NG, iw)
+     call PP_redux_wait(X_full, COMM=X_par%INTER_comm%COMM)
+     if (X_par%nrows>0) X_par%blc(X_par%rows(1):X_par%rows(2), 1:NG, iw) = cZERO
+     ! Note :
+     ! Time reversal maps (X(q,...,E) to X(q,...,-E)
+     ! so we only apply to E = 0 case
+     if (abs(Xw%p(iw)) < 1.e-5_SP) then
+        nsym_loop = nsym
+     else
+        nsym_loop = nsym / (i_time_rev + 1)
+     endif
+     do ig2 = 1, NG
+        do ig1_loc = 1, X_par%nrows
+           ig1 = ig1_loc + X_par%rows(1) - 1
+           do isym = 1, nsym_loop
+              ig1_sym = g_rot(ig1, isym)
+              ig2_sym = g_rot(ig2, isym)
+              !
+              if (ig1_sym > 0 .and. ig1_sym <= NG .and. ig2_sym > 0 .and. ig2_sym <= NG) then
+                 if (isym > nsym / (i_time_rev + 1)) then
+                    X_par%blc(ig1, ig2, iw) = X_par%blc(ig1, ig2, iw) + &
+                         conjg(X_full(ig1_sym, ig2_sym)) / real(nsym_loop, SP)
+                 else
+                    X_par%blc(ig1, ig2, iw) = X_par%blc(ig1, ig2, iw) + &
+                         X_full(ig1_sym, ig2_sym) / real(nsym_loop, SP)
+                 endif
+              endif
+           enddo
+        enddo
+     enddo
+  enddo
+  !
+  deallocate(X_full)
+!
+end subroutine X_symmetrize_q0

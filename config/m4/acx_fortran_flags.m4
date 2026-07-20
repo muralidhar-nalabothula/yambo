@@ -43,7 +43,7 @@ i?86*linux*)
     DEBUG_FLAGS="-g -Minform=inform -Mbounds -Mchkptr -Mchkstk -Meh_frame -Mbackslash"
     ;;
   *nvfortran* )
-    SYSFLAGS="-O1 -gopt -Mnoframe -Mdalign -Mbackslash -cpp"
+    SYSFLAGS="-O1 -gopt -Mnoframe -Mdalign -Mbackslash -cpp -c++libs"
     FUFLAGS="-O0 -Mbackslash"
     FCMFLAG="-Mnomain"
     OMPFLAGS="-mp"
@@ -280,6 +280,15 @@ aarch*linux* | arm*linux* )
     NETCDFFLAGS="-DgFortran"
     DEBUG_FLAGS="-Og -g -Wall -pedantic -fbounds-check -ffpe-trap=invalid,zero,overflow"
     ;;
+  *nvfortran* )
+    SYSFLAGS="-O1 -gopt -Mnoframe -Mdalign -Mbackslash -cpp -c++libs"
+    FUFLAGS="-O0 -g -Mbackslash -cpp"
+    FCMFLAG="-Mnomain"
+    OMPFLAGS="-mp"
+    def_compiler="-D_PGI"
+    NETCDFFLAGS="-DpgiFortran"
+    DEBUG_FLAGS="-g -Minform=inform -Mbounds -Mchkptr -Mchkstk -Meh_frame  -Mbackslash -cpp"
+    ;;
   *)
     SYSFLAGS="-g -O"
     FUFLAGS="-O0"
@@ -296,7 +305,7 @@ aarch*linux* | arm*linux* )
     DEBUG_FLAGS="-g "
   ;;
   *pgf9* | *ftn* | *pgfortran* | *nvfortran* )
-    SYSFLAGS="-O1 -gopt -Mnoframe -Mdalign -Mbackslash -cpp"
+    SYSFLAGS="-O1 -gopt -Mnoframe -Mdalign -Mbackslash -cpp -c++libs"
     #SYSFLAGS="-O2 -g -Munroll -Mnoframe -Mdalign -Mbackslash -cpp"
     FUFLAGS="-O0 -g -Mbackslash -cpp"
     FCMFLAG="-Mnomain"

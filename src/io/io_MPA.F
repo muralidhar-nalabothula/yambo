@@ -3,7 +3,7 @@
 !
 ! Copyright (C) 2014 The Yambo Team
 !
-! Authors (see AUTHORS file for details): DALV AF
+! Authors (see AUTHORS file for details): DALV AF GS
 !
 integer function io_MPA(X,Xw,ID)
  !
@@ -63,7 +63,7 @@ integer function io_MPA(X,Xw,ID)
    !
    ! Header
    !
-   io_MPA=io_header(ID,QPTS=.true.,R_LATT=.true.,WF=.false.,FRAG=frag_MULTIPOLE)
+   io_MPA=io_header(ID,QPTS=.true.,R_LATT=.true.,WF=.false.,CUTOFF=.true.,FRAG=frag_MULTIPOLE)
    if (io_MPA/=0) goto 1
    !
    ! Global Descriptions
@@ -105,7 +105,7 @@ integer function io_MPA(X,Xw,ID)
    call def_variable_elemental(ID_frag,trim(ch),sec_size,SP,1,par_io_kind='independent')
    !
    call io_variable_elemental(ID_frag,  VAR=" :: Current Q-pt index     :",I0=iq)
-   call io_variable_elemental(ID_frag,  VAR=" :: Number of poles  :",I0=Xw%n_freqs/2,CHECK=.true.,OP=(/"=="/))
+   call io_variable_elemental(ID_frag,  VAR=" :: Number of poles  :",I0=X%mpa_npoles,CHECK=.true.,OP=(/"=="/))
    !
    call def_variable_elemental(ID_frag,"",0,0,1)
    io_MPA=io_status(ID_frag)
@@ -129,35 +129,15 @@ integer function io_MPA(X,Xw,ID)
    !
    ch="MPA_E_Q_"//trim(intc(iq))
    !
-   if(write_is_on(ID)) then
-#if defined _PAR_IO
-     call def_variable_bulk(ID_frag,trim(ch),1,(/2,X%ng_db,X%ng_db,Xw%n_freqs/),SP,par_io_kind='collective')
-#else
-     call def_variable_bulk(ID_frag,trim(ch),1,(/2,X%ng_db,X%ng_db,Xw%n_freqs/),SP,par_io_kind='independent')
-#endif
-     call  io_variable_bulk(ID_frag,1,C3=MPA_E_par(1)%blc(:,:,:Xw%n_freqs),IPOS=(/1,MPA_E_par(1)%rows(1),MPA_E_par(1)%cols(1),1/))
-     !
-   else if(read_is_on(ID)) then
-     call def_variable_bulk(ID_frag,trim(ch),1,(/2,X%ng_db,X%ng_db,Xw%n_freqs/),SP)
-     call  io_variable_bulk(ID_frag,1,C3=MPA_E_par(1)%blc(:,:,:Xw%n_freqs),IPOS=(/1,MPA_E_par(1)%rows(1),MPA_E_par(1)%cols(1),1/))
-   endif
+   call def_variable_bulk(ID_frag,trim(ch),1,(/2,X%ng_db,X%ng_db,X%mpa_npoles/),SP,par_io_kind='independent')
+   call io_variable_bulk(ID_frag,1,C3=MPA_E_par(1)%blc(:,:,:X%mpa_npoles),IPOS=(/1,MPA_E_par(1)%rows(1),MPA_E_par(1)%cols(1),1/))
    !
    ! residues @iq
    !
    ch="MPA_R_Q_"//trim(intc(iq))
    !
-   if(write_is_on(ID)) then
-#if defined _PAR_IO
-     call def_variable_bulk(ID_frag,trim(ch),1,(/2,X%ng_db,X%ng_db,Xw%n_freqs/),SP,par_io_kind='collective')
-#else
-     call def_variable_bulk(ID_frag,trim(ch),1,(/2,X%ng_db,X%ng_db,Xw%n_freqs/),SP,par_io_kind='independent')
-#endif
-     call  io_variable_bulk(ID_frag,1,C3=MPA_R_par(1)%blc(:,:,:Xw%n_freqs),IPOS=(/1,MPA_R_par(1)%rows(1),MPA_R_par(1)%cols(1),1/))
-     !
-   else if(read_is_on(ID)) then
-     call def_variable_bulk(ID_frag,trim(ch),1,(/2,X%ng_db,X%ng_db,Xw%n_freqs/),SP)
-     call  io_variable_bulk(ID_frag,1,C3=MPA_R_par(1)%blc(:,:,:Xw%n_freqs),IPOS=(/1,MPA_R_par(1)%rows(1),MPA_R_par(1)%cols(1),1/))
-   endif
+   call def_variable_bulk(ID_frag,trim(ch),1,(/2,X%ng_db,X%ng_db,X%mpa_npoles/),SP,par_io_kind='independent')
+   call io_variable_bulk(ID_frag,1,C3=MPA_R_par(1)%blc(:,:,:X%mpa_npoles),IPOS=(/1,MPA_R_par(1)%rows(1),MPA_R_par(1)%cols(1),1/))
    !
    if (read_is_on(ID) .and. different_db_RL_order) then 
      call error('[io_MPA] different_db_RL_order    not implemented')

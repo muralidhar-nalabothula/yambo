@@ -115,8 +115,6 @@ module X_m
  ! PARALLEL distribution
  !
  type(PAR_matrix), allocatable, target :: X_par(:)
- type(PAR_matrix), target      :: X_par_lower_triangle
- logical                       :: X_lower_triangle_matrix_in_use=.FALSE.
  integer                       :: X_rows(2) = 0
  !DEV_ACC declare device_resident(X_rows)
  integer                       :: X_cols(2) = 0
@@ -126,8 +124,8 @@ module X_m
  !
  type X_t
    ! DS: is 1 Xo (see X_dielectric_matrix:109) or Xx (see io_X.F) ?
-   !     why is 5 reported as IP in the develop
-   integer    :: whoami ! 1:Xo/Xx 2:em1s 3:em1d 4:ppa 5:mpa ?:IP
+   !
+   integer    :: whoami ! 1:Xo/Xx 2:em1s 3:em1d 4:ppa 5:mpa
    integer    :: ng
    integer    :: ng_db
    integer    :: iq(2)

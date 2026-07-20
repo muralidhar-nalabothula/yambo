@@ -53,7 +53,7 @@ integer function INIT(en,q,k,X,Xw,Dip,instr,lnstr,CLOSE_Gs,FINALIZE)
  use SC,             ONLY:SC_ng_Sx,SC_X_bands,SC_X_size
 #endif
 #if defined _OPENMP
- use openmp,         ONLY:n_threads_X,n_threads_DIP,n_threads_SE,n_threads_RT,n_threads_K,n_threads_NL
+ use openmp,         ONLY:n_threads_X,n_threads_DIP,n_threads_SE,n_threads_SX,n_threads_RT,n_threads_K,n_threads_NL
 #endif
 #if defined _YAML_OUTPUT
  use pars,           ONLY:logfile_index,repfile_index
@@ -113,7 +113,7 @@ integer function INIT(en,q,k,X,Xw,Dip,instr,lnstr,CLOSE_Gs,FINALIZE)
    call W_reset(Xw(2),damping=0.001_SP)
    call W_reset(Xw(3))
    call W_reset(Xw(4))
-   call W_reset(Xw(5))
+   call W_reset(Xw(5),type=5)
    call X_reset(X(1),type=1)
    call X_reset(X(2),type=2)
    call X_reset(X(3),type=3)
@@ -466,8 +466,8 @@ integer function INIT(en,q,k,X,Xw,Dip,instr,lnstr,CLOSE_Gs,FINALIZE)
        n_threads_X=0
        n_threads_DIP=0
      endif
-     if (l_HF_and_locXC.or.l_gw0.or.l_cohsex.or.l_sc_run&
-&                               .or.l_ppa.or.l_mpa)       n_threads_SE=0
+     if (l_gw0.or.l_cohsex.or.l_sc_run.or.l_ppa.or.l_mpa)      n_threads_SE=0
+     if (l_HF_and_locXC)                                  n_threads_SX=0
      if (l_real_time)                                     n_threads_RT=0
      if (l_nl_optics)                                     n_threads_NL=0
 #endif
